@@ -1,0 +1,76 @@
+{
+  "project_info": {
+    "project_number": "675378320956",
+    "project_id": "noon-8531a",
+    "storage_bucket": "noon-8531a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:675378320956:android:6db1069d60ac19c4729539",
+        "android_client_info": {
+          "package_name": "com.example.noon_chat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "675378320956-kg0v0sf8vaqulki8gtopl0u5qs1m35ql.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnyKSGEHfOk1pAJlSDMVAqUc9jVbiQC90"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "675378320956-kg0v0sf8vaqulki8gtopl0u5qs1m35ql.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:675378320956:android:05062fe034b4f46b729539",
+        "android_client_info": {
+          "package_name": "com.islam.noonchat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "675378320956-f2ntm7vqv1i289h4fipqmjkmlcs4b3b6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.islam.noonchat",
+            "certificate_hash": "8a17d03e73b1f074b293faafa5a18ea2eedf59ea"
+          }
+        },
+        {
+          "client_id": "675378320956-kg0v0sf8vaqulki8gtopl0u5qs1m35ql.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnyKSGEHfOk1pAJlSDMVAqUc9jVbiQC90"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "675378320956-kg0v0sf8vaqulki8gtopl0u5qs1m35ql.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
