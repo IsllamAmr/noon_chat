@@ -19,12 +19,17 @@ A real-time chat application built with **Flutter & Firebase**.
 - Share Plus
 
 ## 🚀 How to Run
-```bash
-flutter pub get
-flutter run
-## 📸 Screenshots
+- flutter pub get
+- flutter run
+## 
 
-![Login Screen](assets/screenshots/login.png)
-![Home Screen](assets/screenshots/home.png)
-![Chat Screen](assets/screenshots/chat.png)
-![Invite Screen](assets/screenshots/invite.png)
+## 📸 Screenshots
+## 
+
+
+![Home](assets/screenshots/home.png)
+![Login](assets/screenshots/login.png)
+![Invite](assets/screenshots/invite.png)
+![Chat](assets/screenshots/chat.png)
+
+
