@@ -1,16 +1,24 @@
-# noon_chat
+# 📱 Noon Chat
 
-A new Flutter project.
+A real-time chat application built with **Flutter & Firebase**.
 
-## Getting Started
+## ✨ Features
+- Google Sign-In Authentication
+- Real-time messaging using Firestore
+- Invite system with unique codes
+- QR code sharing
+- Delete chats from your inbox
+- Clean chat UI with message bubbles
 
-This project is a starting point for a Flutter application.
+## 🛠 Tech Stack
+- Flutter (Dart)
+- Firebase Authentication
+- Cloud Firestore
+- Google Sign-In
+- QR Flutter
+- Share Plus
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🚀 How to Run
+```bash
+flutter pub get
+flutter run
