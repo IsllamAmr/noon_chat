@@ -22,3 +22,9 @@ A real-time chat application built with **Flutter & Firebase**.
 ```bash
 flutter pub get
 flutter run
+## 📸 Screenshots
+
+![Login Screen](assets/screenshots/login.png)
+![Home Screen](assets/screenshots/home.png)
+![Chat Screen](assets/screenshots/chat.png)
+![Invite Screen](assets/screenshots/invite.png)
