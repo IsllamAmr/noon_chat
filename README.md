@@ -27,9 +27,9 @@ A real-time chat application built with **Flutter & Firebase**.
 ## 
 
 
-![Home](assets/screenshots/home.png)
-![Login](assets/screenshots/login.png)
-![Invite](assets/screenshots/invite.png)
-![Chat](assets/screenshots/chat.png)
+![Home](android.assets/screenshots/home.png)
+![Login](android.assets/screenshots/login.png)
+![Invite](android.assets/screenshots/invite.png)
+![Chat](android.assets/screenshots/chat.png)
 
 
