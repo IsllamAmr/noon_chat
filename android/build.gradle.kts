@@ -1,3 +1,5 @@
+import java.io.File
+
 buildscript {
     repositories {
         google()
@@ -15,15 +17,20 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory =
+val defaultBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")
         .get()
-rootProject.layout.buildDirectory.value(newBuildDir)
+rootProject.layout.buildDirectory.value(defaultBuildDir)
+val tempBuildRoot = File(System.getProperty("java.io.tmpdir"), "noon_chat_build")
 
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
+    if (project.name == "app") {
+        project.layout.buildDirectory.value(defaultBuildDir.dir(project.name))
+    } else {
+        val newSubprojectBuildDir = File(tempBuildRoot, project.name)
+        project.layout.buildDirectory.set(newSubprojectBuildDir)
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

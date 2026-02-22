@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import 'user_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -11,26 +14,46 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _nameCtrl = TextEditingController();
+  final _statusCtrl = TextEditingController();
+  final _picker = ImagePicker();
   bool _saving = false;
+  bool _loaded = false;
+  String _photoUrl = '';
 
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _statusCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) return;
+  Future<void> _pickPhoto() async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
 
     setState(() => _saving = true);
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'name': name,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      final bytes = await picked.readAsBytes();
+      final url = await UserService.uploadMyPhoto(bytes);
+      if (!mounted) return;
+      setState(() => _photoUrl = url);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await UserService.updateMyProfile(
+        name: _nameCtrl.text.trim(),
+        status: _statusCtrl.text.trim(),
+        photoUrl: _photoUrl,
+      );
       if (!mounted) return;
       Navigator.pop(context);
     } finally {
@@ -38,28 +61,135 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text('This will delete your profile data permanently.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await UserService.deleteMyAccountData();
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("تعديل الاسم")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: "اسمك داخل التطبيق",
-                border: OutlineInputBorder(),
+      appBar: AppBar(title: const Text('Edit profile')),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+        builder: (context, snap) {
+          final data = snap.data?.data() ?? const <String, dynamic>{};
+          final dbName = (data['name'] as String?)?.trim() ?? '';
+          final dbPhoto = (data['photo'] as String?)?.trim() ?? '';
+          final dbStatus = (data['status'] as String?)?.trim() ?? '';
+
+          if (!_loaded) {
+            _nameCtrl.text = dbName;
+            _statusCtrl.text = dbStatus;
+            _photoUrl = dbPhoto;
+            _loaded = true;
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Center(
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 54,
+                      backgroundColor: scheme.primaryContainer,
+                      backgroundImage: _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
+                      child: _photoUrl.isEmpty
+                          ? Text(
+                              _nameCtrl.text.isNotEmpty
+                                  ? _nameCtrl.text[0].toUpperCase()
+                                  : 'U',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 32,
+                              ),
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: FilledButton.tonalIcon(
+                        onPressed: _saving ? null : _pickPhoto,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Photo'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? "جارٍ الحفظ..." : "حفظ"),
-            ),
-          ],
-        ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _nameCtrl,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Your name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _statusCtrl,
+                textInputAction: TextInputAction.done,
+                maxLength: 70,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_rounded),
+                label: Text(_saving ? 'Saving...' : 'Save'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _saving ? null : _deleteAccount,
+                icon: const Icon(Icons.delete_forever_outlined),
+                label: const Text('Delete Account'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

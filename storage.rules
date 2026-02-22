@@ -1,0 +1,44 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function inChat(chatId) {
+      return signedIn() &&
+        request.auth.uid in
+          firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
+    }
+
+    match /users/{uid}/profile.jpg {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if signedIn() && request.auth.uid == uid &&
+        request.resource.size < 5 * 1024 * 1024;
+    }
+
+    match /chats/{chatId}/images/{uid}/{fileName} {
+      allow read: if inChat(chatId);
+      allow write: if signedIn() && request.auth.uid == uid && inChat(chatId) &&
+        request.resource.size < 10 * 1024 * 1024;
+    }
+
+    match /chats/{chatId}/files/{uid}/{fileName} {
+      allow read: if inChat(chatId);
+      allow write: if signedIn() && request.auth.uid == uid && inChat(chatId) &&
+        request.resource.size < 25 * 1024 * 1024;
+    }
+
+    match /chats/{chatId}/audio/{uid}/{fileName} {
+      allow read: if inChat(chatId);
+      allow write: if signedIn() && request.auth.uid == uid && inChat(chatId) &&
+        request.resource.size < 15 * 1024 * 1024;
+    }
+
+    match /stories/{uid}/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid &&
+        request.resource.size < 10 * 1024 * 1024;
+    }
+  }
+}

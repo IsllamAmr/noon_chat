@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.noon_chat",
+      "sha256_cert_fingerprints": [
+        "D1:34:0D:AE:B4:F5:C0:E7:26:60:2C:0A:6A:14:26:AD:BC:83:21:49:8D:79:25:D9:24:A1:E4:4A:B4:E9:01:77"
+      ]
+    }
+  }
+]

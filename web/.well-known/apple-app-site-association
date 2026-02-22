@@ -1,0 +1,19 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "TEAM_ID.com.example.noonChat"
+        ],
+        "components": [
+          {
+            "/": "/invite/*"
+          },
+          {
+            "/": "/join/*"
+          }
+        ]
+      }
+    ]
+  }
+}
