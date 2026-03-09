@@ -16,6 +16,21 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
     }
 
+    function inConversation(conversationId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
+        get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants is list &&
+        request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+    }
+
+    function participantsForInbox(chatId) {
+      return exists(/databases/$(database)/documents/chats/$(chatId)) ?
+        get(/databases/$(database)/documents/chats/$(chatId)).data.participants :
+        exists(/databases/$(database)/documents/conversations/$(chatId)) ?
+          get(/databases/$(database)/documents/conversations/$(chatId)).data.participants :
+          [];
+    }
+
     function validName(name) {
       return name is string && name.size() > 0 && name.size() <= 50;
     }
@@ -28,14 +43,46 @@ service cloud.firestore {
       return status is string && status.size() <= 70;
     }
 
+    function validUserDoc(data, uid) {
+      return
+        (!('uid' in data) || data.uid == uid) &&
+        (!('name' in data) || validName(data.name)) &&
+        (!('displayName' in data) || validName(data.displayName)) &&
+        (!('nameLower' in data) || validNameLower(data.nameLower)) &&
+        (!('status' in data) || validStatus(data.status)) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 180)) &&
+        (!('emailLower' in data) || (data.emailLower is string && data.emailLower.size() <= 180)) &&
+        (!('photo' in data) || (data.photo is string && data.photo.size() <= 2000)) &&
+        (!('photoUrl' in data) ||
+          data.photoUrl == null ||
+          (data.photoUrl is string && data.photoUrl.size() <= 2000)) &&
+        (!('searchKeywords' in data) ||
+          (data.searchKeywords is list && data.searchKeywords.size() <= 320)) &&
+        (!('privacy' in data) || data.privacy is map) &&
+        (!('blocked' in data) || data.blocked is list) &&
+        (!('online' in data) || data.online is bool) &&
+        (!('lastSeen' in data) || data.lastSeen is timestamp) &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+        (!('fcmUpdatedAt' in data) || data.fcmUpdatedAt is timestamp) &&
+        (!('fcmToken' in data) ||
+          (data.fcmToken is string && data.fcmToken.size() <= 512)) &&
+        (!('fcmTokens' in data) ||
+          (data.fcmTokens is list && data.fcmTokens.size() <= 60));
+    }
+
     function validChatCreate(data) {
       return data.participants is list &&
         data.participants.size() >= 1 &&
         data.participants.size() <= 2 &&
         request.auth.uid in data.participants &&
+        (!('members' in data) || (data.members is list && data.members.size() >= 1 && data.members.size() <= 2)) &&
+        (!('memberMap' in data) || data.memberMap is map) &&
         data.keys().hasAll(['participants']) &&
         data.keys().hasOnly([
           'participants',
+          'members',
+          'memberMap',
           'createdBy',
           'createdAt',
           'lastMessage',
@@ -106,13 +153,20 @@ service cloud.firestore {
 
     function _canSetSeen() {
       return request.resource.data.diff(resource.data).changedKeys()
-        .hasOnly(['seenAt']) &&
+        .hasOnly(['seenAt', 'updatedAt']) &&
         _validSeenUpdate();
     }
 
     function _canSetDelivered() {
       return request.resource.data.diff(resource.data).changedKeys()
-        .hasOnly(['deliveredAt']) &&
+        .hasOnly(['deliveredAt', 'updatedAt']) &&
+        _validDeliveredUpdate();
+    }
+
+    function _canSetSeenAndDelivered() {
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(['seenAt', 'deliveredAt', 'updatedAt']) &&
+        _validSeenUpdate() &&
         _validDeliveredUpdate();
     }
 
@@ -140,6 +194,7 @@ service cloud.firestore {
           _canUpdateChatMetadataOnSend() ||
           _canUpdateLastMessagePreviewOnly() ||
           _canSetTyping() ||
+          _canSetSeenAndDelivered() ||
           _canSetSeen() ||
           _canSetDelivered() ||
           _canSetDisappearingTimer()
@@ -164,6 +219,10 @@ service cloud.firestore {
       return data.senderId == request.auth.uid &&
         data.type in ['text', 'image', 'file', 'audio', 'call'] &&
         data.createdAt is timestamp &&
+        (!('clientMessageId' in data) ||
+          (data.clientMessageId is string &&
+            data.clientMessageId.size() > 0 &&
+            data.clientMessageId.size() <= 120)) &&
         (!('text' in data) || (data.text is string && data.text.size() <= 2000)) &&
         (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2000)) &&
         (!('fileUrl' in data) || (data.fileUrl is string && data.fileUrl.size() <= 2000)) &&
@@ -215,6 +274,8 @@ service cloud.firestore {
     function canEditTextMessage() {
       return request.auth.uid == resource.data.senderId &&
         resource.data.type == 'text' &&
+        resource.data.createdAt is timestamp &&
+        request.time <= resource.data.createdAt + duration.value(5, 'm') &&
         request.resource.data.diff(resource.data).changedKeys()
           .hasOnly(['text', 'editedAt', 'updatedAt']) &&
         request.resource.data.text is string &&
@@ -245,21 +306,65 @@ service cloud.firestore {
     }
 
     function participantCanWriteInbox(uid, chatId, data) {
+      let participants = participantsForInbox(chatId);
       return signedIn() &&
         ('chatId' in data) &&
         data.chatId == chatId &&
-        exists(/databases/$(database)/documents/chats/$(chatId)) &&
-        get(/databases/$(database)/documents/chats/$(chatId)).data.participants is list &&
-        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
-        uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        participants is list &&
+        request.auth.uid in participants &&
+        uid in participants;
     }
 
     match /users/{uid} {
-      allow read: if signedIn();
-      allow create, update: if isMe(uid) &&
-        (!('name' in request.resource.data) || validName(request.resource.data.name)) &&
-        (!('nameLower' in request.resource.data) || validNameLower(request.resource.data.nameLower)) &&
-        (!('status' in request.resource.data) || validStatus(request.resource.data.status));
+      allow get: if signedIn();
+      allow list: if signedIn() &&
+        request.query.limit != null &&
+        request.query.limit <= 50;
+      allow create: if isMe(uid) &&
+        validUserDoc(request.resource.data, uid) &&
+        request.resource.data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'name',
+          'nameLower',
+          'searchKeywords',
+          'email',
+          'emailLower',
+          'photoUrl',
+          'photo',
+          'status',
+          'privacy',
+          'blocked',
+          'online',
+          'lastSeen',
+          'createdAt',
+          'updatedAt',
+          'fcmToken',
+          'fcmTokens',
+          'fcmUpdatedAt'
+        ]);
+      allow update: if isMe(uid) &&
+        validUserDoc(request.resource.data, uid) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'uid',
+          'displayName',
+          'name',
+          'nameLower',
+          'searchKeywords',
+          'email',
+          'emailLower',
+          'photoUrl',
+          'photo',
+          'status',
+          'privacy',
+          'blocked',
+          'online',
+          'lastSeen',
+          'updatedAt',
+          'fcmToken',
+          'fcmTokens',
+          'fcmUpdatedAt'
+        ]);
       allow delete: if isMe(uid);
     }
 
@@ -287,11 +392,32 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /conversations/{conversationId} {
+      allow read: if inConversation(conversationId);
+      allow create: if signedIn() && validChatCreate(request.resource.data);
+      allow update: if
+        (inConversation(conversationId) && chatFieldsCanUpdate()) ||
+        chatJoinByInviteUpdate();
+      allow delete: if false;
+    }
+
     match /chats/{chatId}/messages/{messageId} {
       allow read: if inChat(chatId);
       allow create: if inChat(chatId) && validMessage(request.resource.data);
       allow update: if inChat(chatId) &&
         (canUpdateReactions() || canHideMessageForSelf() || canEditTextMessage() || canDeleteForEveryone());
+      allow delete: if false;
+    }
+
+    match /conversations/{conversationId}/messages/{messageId} {
+      allow read: if inConversation(conversationId);
+      allow create: if inConversation(conversationId) &&
+        validMessage(request.resource.data);
+      allow update: if inConversation(conversationId) &&
+        (canUpdateReactions() ||
+          canHideMessageForSelf() ||
+          canEditTextMessage() ||
+          canDeleteForEveryone());
       allow delete: if false;
     }
 
@@ -333,26 +459,112 @@ service cloud.firestore {
     match /stories/{storyId} {
       allow read: if signedIn();
       allow create: if signedIn() &&
-        request.resource.data.uid == request.auth.uid &&
-        request.resource.data.keys().hasOnly([
-          'uid', 'type', 'text', 'mediaUrl', 'createdAt', 'expiresAt',
-          'viewers', 'updatedAt'
-        ]) &&
+        request.resource.data.storyId == storyId &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerName is string &&
+        request.resource.data.ownerName.size() > 0 &&
+        request.resource.data.ownerName.size() <= 70 &&
+        (!('ownerPhotoUrl' in request.resource.data) ||
+          request.resource.data.ownerPhotoUrl == null ||
+          (request.resource.data.ownerPhotoUrl is string &&
+            request.resource.data.ownerPhotoUrl.size() <= 2000)) &&
         request.resource.data.type in ['text', 'image'] &&
-        (!(request.resource.data.text is string) || request.resource.data.text.size() <= 700) &&
-        (!(request.resource.data.mediaUrl is string) || request.resource.data.mediaUrl.size() <= 2000);
-      allow update: if signedIn() && (
-        request.auth.uid == resource.data.uid ||
+        (!('text' in request.resource.data) ||
+          request.resource.data.text == null ||
+          (request.resource.data.text is string &&
+            request.resource.data.text.size() <= 700)) &&
+        (!('imageUrl' in request.resource.data) ||
+          request.resource.data.imageUrl == null ||
+          (request.resource.data.imageUrl is string &&
+            request.resource.data.imageUrl.size() <= 2000)) &&
+        (!('backgroundId' in request.resource.data) ||
+          request.resource.data.backgroundId == null ||
+          (request.resource.data.backgroundId is string &&
+            request.resource.data.backgroundId.size() <= 40)) &&
+        (!('textStyleId' in request.resource.data) ||
+          request.resource.data.textStyleId == null ||
+          (request.resource.data.textStyleId is string &&
+            request.resource.data.textStyleId.size() <= 40)) &&
+        request.resource.data.createdAt is timestamp &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.resource.data.createdAt &&
+        request.resource.data.viewersCount is int &&
+        request.resource.data.viewersCount == 0 &&
+        (!('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid) &&
+        (!('mediaUrl' in request.resource.data) ||
+          (request.resource.data.mediaUrl is string &&
+            request.resource.data.mediaUrl.size() <= 2000)) &&
+        (!('viewers' in request.resource.data) ||
+          (request.resource.data.viewers is list &&
+            request.resource.data.viewers.size() == 0)) &&
+        request.resource.data.keys().hasOnly([
+          'storyId',
+          'ownerId',
+          'ownerName',
+          'ownerPhotoUrl',
+          'type',
+          'text',
+          'imageUrl',
+          'backgroundId',
+          'textStyleId',
+          'createdAt',
+          'expiresAt',
+          'viewersCount',
+          // Legacy keys kept for compatibility with previous app versions:
+          'uid',
+          'mediaUrl',
+          'viewers',
+          'updatedAt'
+        ]);
+      allow update: if signedIn() &&
+        request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['viewersCount']) &&
+        request.resource.data.viewersCount is int &&
         (
-          request.resource.data.diff(resource.data).changedKeys().hasOnly(['viewers', 'updatedAt']) &&
-          request.resource.data.viewers is list &&
-          resource.data.viewers is list &&
-          request.resource.data.viewers.hasAll(resource.data.viewers) &&
-          request.resource.data.viewers.size() <= resource.data.viewers.size() + 1 &&
-          request.auth.uid in request.resource.data.viewers
+          (
+            !(resource.data.viewersCount is int) &&
+            request.resource.data.viewersCount >= 0 &&
+            request.resource.data.viewersCount <= 1
+          ) ||
+          (
+            resource.data.viewersCount is int &&
+            request.resource.data.viewersCount >= resource.data.viewersCount &&
+            request.resource.data.viewersCount <= resource.data.viewersCount + 1
+          )
+        );
+      allow delete: if signedIn() &&
+        (
+          request.auth.uid == resource.data.ownerId ||
+          request.auth.uid == resource.data.uid ||
+          request.auth.uid == resource.data.ownerUid ||
+          request.auth.uid == resource.data.userId
+        );
+    }
+
+    match /stories/{storyId}/views/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        uid == request.auth.uid &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.viewedAt is timestamp &&
+        request.resource.data.keys().hasOnly(['uid', 'viewedAt']);
+      allow update: if false;
+      allow delete: if signedIn() && (
+        uid == request.auth.uid ||
+        (
+          exists(/databases/$(database)/documents/stories/$(storyId)) &&
+          (
+            request.auth.uid ==
+              get(/databases/$(database)/documents/stories/$(storyId)).data.ownerId ||
+            request.auth.uid ==
+              get(/databases/$(database)/documents/stories/$(storyId)).data.uid ||
+            request.auth.uid ==
+              get(/databases/$(database)/documents/stories/$(storyId)).data.ownerUid ||
+            request.auth.uid ==
+              get(/databases/$(database)/documents/stories/$(storyId)).data.userId
+          )
         )
       );
-      allow delete: if signedIn() && request.auth.uid == resource.data.uid;
     }
   }
 }

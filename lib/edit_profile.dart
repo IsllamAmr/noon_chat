@@ -16,9 +16,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _nameCtrl = TextEditingController();
   final _statusCtrl = TextEditingController();
   final _picker = ImagePicker();
+  late final Future<DocumentSnapshot<Map<String, dynamic>>> _profileFuture;
   bool _saving = false;
   bool _loaded = false;
   String _photoUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    _profileFuture = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+  }
 
   @override
   void dispose() {
@@ -96,14 +107,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Edit profile')),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        future: _profileFuture,
         builder: (context, snap) {
+          if (snap.hasError) {
+            return const Center(child: Text('Failed to load profile'));
+          }
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final data = snap.data?.data() ?? const <String, dynamic>{};
           final dbName = (data['name'] as String?)?.trim() ?? '';
           final dbPhoto = (data['photo'] as String?)?.trim() ?? '';
@@ -125,7 +141,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     CircleAvatar(
                       radius: 54,
                       backgroundColor: scheme.primaryContainer,
-                      backgroundImage: _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
+                      backgroundImage: _photoUrl.isNotEmpty
+                          ? NetworkImage(_photoUrl)
+                          : null,
                       child: _photoUrl.isEmpty
                           ? Text(
                               _nameCtrl.text.isNotEmpty

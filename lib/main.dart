@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_navigator.dart';
 import 'deep_link_service.dart';
@@ -14,32 +15,113 @@ import 'user_service.dart';
 import 'chats_home.dart';
 import 'user_presence_service.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(const MyApp());
+bool _startupServicesInitialized = false;
+
+Future<void> _startDeferredStartupServices() async {
+  if (_startupServicesInitialized) return;
+  _startupServicesInitialized = true;
   unawaited(NotificationService.initialize());
   unawaited(DeepLinkService.initialize());
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.registerBackgroundHandler();
+  await Firebase.initializeApp();
+  await AppThemeController.initialize();
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   ThemeData _buildTheme({required Color seed, required Brightness brightness}) {
-    return ThemeData(
+    final isDark = brightness == Brightness.dark;
+    final base = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
         seedColor: seed,
         brightness: brightness,
       ),
-      scaffoldBackgroundColor: brightness == Brightness.dark
-          ? const Color(0xFF0F1720)
-          : const Color(0xFFF6FAFD),
-      cardTheme: const CardThemeData(
+      scaffoldBackgroundColor: isDark
+          ? const Color(0xFF0F141B)
+          : const Color(0xFFF2F6FC),
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    final textTheme = GoogleFonts.manropeTextTheme(base.textTheme).copyWith(
+      headlineLarge: GoogleFonts.sora(
+        fontWeight: FontWeight.w700,
+        fontSize: 32,
+        color: base.colorScheme.onSurface,
+      ),
+      headlineMedium: GoogleFonts.sora(
+        fontWeight: FontWeight.w700,
+        color: base.colorScheme.onSurface,
+      ),
+      titleLarge: GoogleFonts.sora(
+        fontWeight: FontWeight.w700,
+        color: base.colorScheme.onSurface,
+      ),
+      labelLarge: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+    );
+
+    return base.copyWith(
+      textTheme: textTheme,
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
+        scrolledUnderElevation: 0,
+        titleTextStyle: textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w800,
         ),
+      ),
+      cardTheme: CardThemeData(
+        color: isDark
+            ? const Color(0xFF171F2A).withValues(alpha: 0.95)
+            : Colors.white.withValues(alpha: 0.98),
+        elevation: isDark ? 0 : 1.2,
+        shadowColor: Colors.black.withValues(alpha: isDark ? 0.20 : 0.08),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isDark ? const Color(0xFF1A2431) : Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.05),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: base.colorScheme.primary, width: 1.3),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          elevation: 0,
+          textStyle: textTheme.labelLarge,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
@@ -67,7 +149,7 @@ class MyApp extends StatelessWidget {
                     brightness: Brightness.dark,
                   ),
                   themeMode: mode,
-                  home: const SessionPresence(child: AuthGate()),
+                  home: const AppEntry(),
                 );
               },
             );
@@ -78,23 +160,31 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+class AppEntry extends StatefulWidget {
+  const AppEntry({super.key});
+
+  @override
+  State<AppEntry> createState() => _AppEntryState();
+}
+
+class _AppEntryState extends State<AppEntry> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_startDeferredStartupServices());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (snap.data == null) return const GoogleLoginScreen();
-
-        return const ChatsHome();
+        final user = snap.data;
+        if (user == null) return const GoogleLoginScreen();
+        return const SessionPresence(child: ChatsHome());
       },
     );
   }
@@ -142,6 +232,14 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
 
       // خزّن الاسم/الصورة/الإيميل في users/{uid}
       await UserService.upsertMe();
+
+      if (!mounted) return;
+      await Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const SessionPresence(child: ChatsHome()),
+        ),
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       setState(() => error = e.message ?? 'FirebaseAuth error');
     } catch (e) {
@@ -276,15 +374,6 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: colors.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Islam Amr',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: colors.primary,
-                          ),
                         ),
                       ],
                     ),

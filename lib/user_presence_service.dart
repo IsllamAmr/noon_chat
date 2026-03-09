@@ -10,7 +10,12 @@ class SessionPresence extends StatefulWidget {
   State<SessionPresence> createState() => _SessionPresenceState();
 }
 
-class _SessionPresenceState extends State<SessionPresence> with WidgetsBindingObserver {
+class _SessionPresenceState extends State<SessionPresence>
+    with WidgetsBindingObserver {
+  static const Duration _minPresenceWriteGap = Duration(seconds: 10);
+  DateTime _lastPresenceWriteAt = DateTime.fromMillisecondsSinceEpoch(0);
+  bool? _lastOnline;
+
   @override
   void initState() {
     super.initState();
@@ -39,10 +44,21 @@ class _SessionPresenceState extends State<SessionPresence> with WidgetsBindingOb
   Future<void> _setOnline(bool value) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    await FirebaseFirestore.instance.collection('users').doc(uid).set({
-      'online': value,
-      'lastSeen': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final now = DateTime.now();
+    if (_lastOnline == value &&
+        now.difference(_lastPresenceWriteAt) < _minPresenceWriteGap) {
+      return;
+    }
+    _lastOnline = value;
+    _lastPresenceWriteAt = now;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'online': value,
+        'lastSeen': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Presence update failed for $uid: $e');
+    }
   }
 
   @override

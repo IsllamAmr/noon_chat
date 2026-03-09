@@ -12,7 +12,7 @@ service firebase.storage {
     }
 
     match /users/{uid}/profile.jpg {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if signedIn();
       allow write: if signedIn() && request.auth.uid == uid &&
         request.resource.size < 5 * 1024 * 1024;
     }
@@ -35,10 +35,18 @@ service firebase.storage {
         request.resource.size < 15 * 1024 * 1024;
     }
 
+    match /chat_audio/{conversationId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn() &&
+        request.resource.size < 15 * 1024 * 1024 &&
+        request.resource.contentType.matches('audio/.*');
+    }
+
     match /stories/{uid}/{fileName} {
       allow read: if signedIn();
       allow write: if signedIn() && request.auth.uid == uid &&
-        request.resource.size < 10 * 1024 * 1024;
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
     }
   }
 }

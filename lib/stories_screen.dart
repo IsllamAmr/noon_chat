@@ -1,9 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'media_service.dart';
 import 'story_service.dart';
 
 class StoriesScreen extends StatefulWidget {
@@ -15,12 +17,56 @@ class StoriesScreen extends StatefulWidget {
 
 class _StoriesScreenState extends State<StoriesScreen> {
   final _picker = ImagePicker();
+  final Map<String, Map<String, dynamic>> _userCache =
+      <String, Map<String, dynamic>>{};
+  final Set<String> _userLoadsInFlight = <String>{};
   bool _posting = false;
 
   bool _isActive(Map<String, dynamic> d) {
     final exp = d['expiresAt'];
     if (exp is! Timestamp) return false;
     return exp.toDate().isAfter(DateTime.now());
+  }
+
+  Iterable<List<String>> _chunks(List<String> source, int size) sync* {
+    for (var i = 0; i < source.length; i += size) {
+      final end = (i + size < source.length) ? i + size : source.length;
+      yield source.sublist(i, end);
+    }
+  }
+
+  Future<void> _warmUserCache(Iterable<String> uids) async {
+    final missing = uids
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .where(
+          (uid) =>
+              !_userCache.containsKey(uid) && !_userLoadsInFlight.contains(uid),
+        )
+        .toList();
+    if (missing.isEmpty) return;
+    _userLoadsInFlight.addAll(missing);
+
+    final fetched = <String, Map<String, dynamic>>{};
+    try {
+      for (final chunk in _chunks(missing, 10)) {
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        for (final doc in snap.docs) {
+          fetched[doc.id] = doc.data();
+        }
+      }
+    } catch (e) {
+      debugPrint('Stories user cache load failed: $e');
+    } finally {
+      _userLoadsInFlight.removeAll(missing);
+    }
+
+    if (!mounted || fetched.isEmpty) return;
+    setState(() => _userCache.addAll(fetched));
   }
 
   Future<void> _addTextStory() async {
@@ -97,10 +143,15 @@ class _StoriesScreenState extends State<StoriesScreen> {
 
     setState(() => _posting = true);
     try {
-      final url = await MediaService.uploadStoryImage(
-        bytes: await picked.readAsBytes(),
+      await StoryService.createImageStory(
+        imageFile: File(picked.path),
+        caption: caption,
       );
-      await StoryService.addImageStory(mediaUrl: url, caption: caption);
+    } on StoryUploadException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -168,6 +219,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                 : DateTime.fromMillisecondsSinceEpoch(0);
             return bd.compareTo(ad);
           });
+          unawaited(_warmUserCache(others.map((e) => e.key)));
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
@@ -224,6 +276,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                 _StoryUserTile(
                   uid: entry.key,
                   docs: entry.value,
+                  userData: _userCache[entry.key],
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -243,10 +296,12 @@ class _StoriesScreenState extends State<StoriesScreen> {
 class _StoryUserTile extends StatelessWidget {
   final String uid;
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final Map<String, dynamic>? userData;
   final VoidCallback onTap;
   const _StoryUserTile({
     required this.uid,
     required this.docs,
+    this.userData,
     required this.onTap,
   });
 
@@ -258,33 +313,26 @@ class _StoryUserTile extends StatelessWidget {
     final subtitleTime = createdAt is Timestamp
         ? TimeOfDay.fromDateTime(createdAt.toDate()).format(context)
         : '';
-
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .snapshots(),
-      builder: (context, snap) {
-        final user = snap.data?.data() ?? const <String, dynamic>{};
-        final name = ((user['name'] ?? 'Noon User') as String).trim();
-        final photo = ((user['photo'] ?? '') as String).trim();
-        return Card(
-          child: ListTile(
-            onTap: onTap,
-            leading: CircleAvatar(
-              backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
-              child: photo.isEmpty ? Text(name[0].toUpperCase()) : null,
-            ),
-            title: Text(name),
-            subtitle: Text(
-              previewText.isEmpty ? 'Story' : previewText,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: Text(subtitleTime),
-          ),
-        );
-      },
+    final user = userData ?? const <String, dynamic>{};
+    final name = ((user['name'] ?? 'Noon User') as String).trim();
+    final photo = ((user['photo'] ?? '') as String).trim();
+    return Card(
+      child: ListTile(
+        onTap: onTap,
+        leading: CircleAvatar(
+          backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+          child: photo.isEmpty
+              ? Text(name.isEmpty ? '?' : name[0].toUpperCase())
+              : null,
+        ),
+        title: Text(name.isEmpty ? 'Noon User' : name),
+        subtitle: Text(
+          previewText.isEmpty ? 'Story' : previewText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Text(subtitleTime),
+      ),
     );
   }
 }
@@ -307,7 +355,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     super.initState();
     _controller = PageController();
     if (widget.docs.isNotEmpty) {
-      StoryService.markViewed(widget.docs.first.id);
+      unawaited(StoryService.markViewed(widget.docs.first.id));
     }
   }
 
@@ -343,7 +391,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
         itemCount: widget.docs.length,
         onPageChanged: (i) {
           setState(() => _index = i);
-          StoryService.markViewed(widget.docs[i].id);
+          unawaited(StoryService.markViewed(widget.docs[i].id));
         },
         itemBuilder: (context, i) {
           final d = widget.docs[i].data();
@@ -373,6 +421,22 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                                 child: Image.network(
                                   mediaUrl,
                                   fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.low,
+                                  cacheWidth: 1080,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return const SizedBox(
+                                      width: 26,
+                                      height: 26,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                      ),
+                                    );
+                                  },
+                                  errorBuilder: (_, _, _) => const Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 34,
+                                  ),
                                 ),
                               )
                             : Text(

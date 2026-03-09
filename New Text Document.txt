@@ -1,0 +1,2 @@
+git switch -c restore-checkpoint checkpoint-20260222-2214
+للرجوع لأخر نسخة
