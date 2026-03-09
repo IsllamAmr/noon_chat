@@ -1,0 +1,12 @@
+{
+  "name": "noon-chat-admin-tools",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dry-run": "node dry-run-delete.js",
+    "delete": "node delete-confirm.js --confirm-delete"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

@@ -1,0 +1,90 @@
+name: noon_chat
+description: "Real-time chat app with Flutter & Firebase."
+publish_to: "none"
+
+version: 1.0.2+1003
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  # FlutterFire BoM 4.10.0 (2026-03-02)
+  firebase_core: ^4.5.0
+  firebase_auth: ^6.2.0
+  cloud_firestore: ^6.1.3
+  firebase_storage: ^13.1.0
+  firebase_messaging: ^16.1.2
+  cloud_functions: ^6.0.7
+  google_sign_in: ^6.2.1
+  flutter_local_notifications: ^19.4.0
+  file_picker: ^8.1.7
+  record: ^6.2.0
+  dynamic_color: ^1.7.0
+  mobile_scanner: ^6.0.2
+  image_picker: ^1.1.2
+  image_cropper: ^9.1.0
+  flutter_image_compress: ^2.4.0
+  path_provider: ^2.1.5
+  permission_handler: ^11.4.0
+  just_audio: ^0.10.4
+  share_plus: ^10.0.2
+  app_links: ^6.4.1
+  url_launcher: ^6.3.0
+  qr_flutter: ^4.1.0
+  google_fonts: ^6.3.2
+  shared_preferences: ^2.5.3
+  http: ^1.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
+  fake_cloud_firestore: ^3.1.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/app_icon.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/app_icon.png"
+  adaptive_icon_background: "#148060"
+  adaptive_icon_foreground: "assets/app_icon.png"
+  web:
+    generate: true
+    image_path: "assets/app_icon.png"
+    background_color: "#148060"
+    theme_color: "#148060"
+  windows:
+    generate: true
+    image_path: "assets/app_icon.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/app_icon.png"
+
+flutter_native_splash:
+  color: "#F6F7FB"
+  color_dark: "#F6F7FB"
+  image: assets/app_icon.png
+  image_dark: assets/app_icon.png
+  android: true
+  ios: true
+  web: false
+  android_12:
+    color: "#F6F7FB"
+    color_dark: "#F6F7FB"
+    image: assets/app_icon.png
+    icon_background_color: "#F6F7FB"
+    icon_background_color_dark: "#F6F7FB"
+
+
+
